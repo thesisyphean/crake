@@ -1,6 +1,8 @@
-// TODO:
+// DONE:
 // (1): Basic board representation
 // (2): Printing boards
+
+// TODO:
 // (3): Generating possible moves
 // (4): Playing a random move
 // (5): Evaluating boards
