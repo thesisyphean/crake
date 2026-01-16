@@ -14,6 +14,8 @@
 
 mod board;
 
+use std::io;
+use rand::Rng;
 use crate::board::Board;
 
 struct Args {
@@ -24,8 +26,32 @@ struct Args {
 }
 
 fn main() {
-    println!("This is crake!");
+    println!("Starting Crake...");
 
-    let board = Board::new();
+    let mut board = Board::new();
     println!("{board}");
+
+    let mut input = String::new();
+    let stdin = io::stdin();
+    let mut rng = rand::rng();
+    loop {
+        println!("(p)rint board, (m)ake a random move, (q)uit");
+        stdin.read_line(&mut input).expect("Failed to read the line");
+        let command = input.trim_ascii_end();
+
+        if command == "p" {
+            println!("{board}");
+        } else if command == "m" {
+            let moves = board.generate_pseudomoves();
+            let move_index = rng.random_range(0..moves.len());
+            board.make_move(moves[move_index]);
+            println!("Move: {:?}", moves[move_index]);
+        } else if command == "q" {
+            break;
+        } else {
+            println!("Unknown command '{input}'");
+        }
+
+        input.clear();
+    }
 }
