@@ -3,6 +3,15 @@ name = "crake"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = ["chess"]
+
+[profile.dev.package.chess]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
 [dependencies]
 arr_macro = "0.2.1"
 rand = "0.9.2"
