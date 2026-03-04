@@ -1,4 +1,4 @@
-use crate::board::{Board, Colour, Move};
+use crate::board::{Board, Move};
 use std::cmp;
 
 pub struct Engine<B: Board> {
@@ -48,10 +48,14 @@ impl<B: Board> Engine<B> {
         }
 
         let moves = self.board.generate_moves();
-        let mut best_score = i32::MIN;
+
+        // If there are no moves available, i.e. checkmate,
+        // then the minimum score is returned, but i32::MIN cannot be negated
+        // due to overflow, so 1 is added to avoid this issue
+        let mut best_score = i32::MIN + 1;
         for cmove in moves {
             let move_data = self.board.make_move(cmove);
-            let score = -self.negamax(self.search_depth - 1);
+            let score = -self.negamax(depth - 1);
             self.board.unmake_move(cmove, move_data);
             best_score = cmp::max(best_score, score);
         }
