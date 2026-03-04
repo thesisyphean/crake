@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use clap::Parser;
 use crake::{
-    board::{Board, Colour, MailboxBoard, Move, Piece, PieceKind, RawMove},
+    board::{Board, Colour, MailboxBoard, Move, Piece, RawMove},
     engine::Engine,
 };
 
@@ -15,7 +15,7 @@ struct Args {
     engine_colour: bool,
 
     // TODO: Change search depth default
-    #[arg(short, long, default_value_t = 3)]
+    #[arg(short, long, default_value_t = 2)]
     search_depth: u8,
 }
 
@@ -166,12 +166,14 @@ fn handle_mouse(
                 .valid_move(RawMove(previous_square, square_index))
             {
                 game_data.engine.player_move(cmove);
-                make_move(previous_square, square_index, &mut commands, &mut pieces);
                 game_data.board.make_move(cmove);
+                make_move(previous_square, square_index, &mut commands, &mut pieces);
                 game_data.players_move = false;
 
                 // TODO: Fine to block here?
-                match game_data.engine.engine_move() {
+                let emove = game_data.engine.engine_move();
+                game_data.board.make_move(emove);
+                match emove {
                     Move::Standard(_, RawMove(from, to), _) => {
                         make_move(from, to, &mut commands, &mut pieces)
                     }
