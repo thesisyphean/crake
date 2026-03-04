@@ -154,45 +154,47 @@ impl MailboxBoard {
     }
 
     fn add_pawn_pseudomoves(&self, moves: &mut Vec<Move>, i: usize, piece: Piece) {
-        // Move one rank forward
-        if let None = self.squares[i + 8] {
-            moves.push(Move::Standard(piece, RawMove(i, i + 8), None));
+        if i / 8 < 6 {
+            // Move one rank forward
+            if let None = self.squares[i + 8] {
+                moves.push(Move::Standard(piece, RawMove(i, i + 8), None));
 
-            // If at starting rank, move two ranks forward
-            if i / 8 == 1 {
-                if let None = self.squares[i + 16] {
-                    moves.push(Move::Standard(piece, RawMove(i, i + 16), None));
-                }
-            }
-        }
-
-        // TODO: Combine these elegantly
-        // Attack to the left
-        if i % 8 != 0 {
-            if let Some(target_piece) = self.squares[i + 7] {
-                if target_piece.colour != piece.colour {
-                    moves.push(Move::Standard(piece, RawMove(i, i + 7), Some(target_piece)));
+                // If at starting rank, move two ranks forward
+                if i / 8 == 1 {
+                    if let None = self.squares[i + 16] {
+                        moves.push(Move::Standard(piece, RawMove(i, i + 16), None));
+                    }
                 }
             }
 
-            if let Some(target_square) = self.en_passant {
-                if target_square == i + 7 {
-                    moves.push(Move::EnPassant(RawMove(i, i + 7)));
+            // TODO: Combine these elegantly
+            // Attack to the left
+            if i % 8 != 0 {
+                if let Some(target_piece) = self.squares[i + 7] {
+                    if target_piece.colour != piece.colour {
+                        moves.push(Move::Standard(piece, RawMove(i, i + 7), Some(target_piece)));
+                    }
+                }
+
+                if let Some(target_square) = self.en_passant {
+                    if target_square == i + 7 {
+                        moves.push(Move::EnPassant(RawMove(i, i + 7)));
+                    }
                 }
             }
-        }
 
-        // Attack to the right
-        if i % 8 != 7 {
-            if let Some(target_piece) = self.squares[i + 9] {
-                if target_piece.colour != piece.colour {
-                    moves.push(Move::Standard(piece, RawMove(i, i + 9), Some(target_piece)));
+            // Attack to the right
+            if i % 8 != 7 {
+                if let Some(target_piece) = self.squares[i + 9] {
+                    if target_piece.colour != piece.colour {
+                        moves.push(Move::Standard(piece, RawMove(i, i + 9), Some(target_piece)));
+                    }
                 }
-            }
 
-            if let Some(target_square) = self.en_passant {
-                if target_square == i + 9 {
-                    moves.push(Move::EnPassant(RawMove(i, i + 9)));
+                if let Some(target_square) = self.en_passant {
+                    if target_square == i + 9 {
+                        moves.push(Move::EnPassant(RawMove(i, i + 9)));
+                    }
                 }
             }
         }
@@ -332,7 +334,7 @@ impl MailboxBoard {
         {
             let diff = from.abs_diff(to);
             if diff == 2 || diff == 3 {
-                return Some(Move::Castling(diff == 2)).filter(|c| !moves.contains(c));
+                return Some(Move::Castling(diff == 2)).filter(|c| moves.contains(c));
             }
         }
 
@@ -346,19 +348,18 @@ impl MailboxBoard {
                 // If you can promote to the queen, you can promote to any other piece,
                 // so the queen is simply used as a dummy option
                 return Some(Move::Promotion(rmove, PieceKind::Queen))
-                    .filter(|c| !moves.contains(c));
+                    .filter(|c| moves.contains(c));
             }
 
-            // En passant
-            if let None = self.squares[to] {
-                return Some(Move::EnPassant(rmove)).filter(|c| !moves.contains(c));
+            if moves.contains(&Move::EnPassant(rmove)) {
+                return Some(Move::EnPassant(rmove));
             }
         }
 
         // Standard move
         if let Some(piece) = self.squares[from] {
             return Some(Move::Standard(piece, rmove, self.squares[to]))
-                .filter(|c| !moves.contains(c));
+                .filter(|c| moves.contains(c));
         }
 
         None
