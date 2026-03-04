@@ -9,7 +9,7 @@ pub enum Colour {
 
 impl Colour {
     fn invert(self) -> Self {
-        if let Self::White = self {
+        if self == Colour::White {
             Self::Black
         } else {
             Self::White
@@ -48,9 +48,7 @@ impl PieceKind {
             'B' => PieceKind::Bishop,
             'N' => PieceKind::Knight,
             'P' => PieceKind::Pawn,
-            _ => {
-                panic!("Invalid algebraic notation for piece '{p}'")
-            }
+            _ => panic!("Invalid algebraic notation for piece kind '{p}'"),
         }
     }
 
@@ -62,18 +60,6 @@ impl PieceKind {
             PieceKind::Bishop => 'B',
             PieceKind::Knight => 'N',
             PieceKind::Pawn => 'P',
-        }
-    }
-
-    // TODO: Make these white pieces, and change math for them in other to_visual_char
-    fn to_visual_char(self) -> char {
-        match self {
-            PieceKind::King => '♔',
-            PieceKind::Queen => '♕',
-            PieceKind::Rook => '♖',
-            PieceKind::Bishop => '♗',
-            PieceKind::Knight => '♘',
-            PieceKind::Pawn => '♙',
         }
     }
 }
@@ -89,7 +75,6 @@ impl Piece {
         Piece { kind, colour }
     }
 
-    // TODO: Should this mention unchecked, write an option version?
     fn from_algebraic(p: char) -> Self {
         Piece {
             kind: PieceKind::from_algebraic(p),
@@ -97,81 +82,40 @@ impl Piece {
         }
     }
 
-    fn to_visual_char(self) -> char {
-        if let Colour::White = self.colour {
-            // The white pieces are directly after the black pieces in unicode
-            char::from_u32(self.kind.to_visual_char() as u32 + 6).unwrap()
-        } else {
-            self.kind.to_visual_char()
-        }
-    }
-
-    // TODO: Colour difference?
     fn to_algebraic(self) -> char {
-        if let Colour::White = self.colour {
-            self.kind.to_algebraic()
-        } else {
-            self.kind.to_algebraic().to_ascii_lowercase()
+        let mut chr = self.kind.to_algebraic();
+
+        if self.colour == Colour::Black {
+            chr.make_ascii_lowercase();
         }
+
+        chr
     }
 }
 
-// TODO: Change access modifiers everywhere!
-pub struct Board {
-    // TODO: Explain how this is indexed
-    pub squares: [Option<Piece>; 64],
-    pub turn: Colour,
-    pub castling: [bool; 4],
-    pub en_passant: Option<usize>,
-    pub halfmoves: u32,
-    pub fullmoves: u32,
-    pub precomputed_moves: PrecomputedMoves,
+pub trait Board {
+    fn from_fen(fen: &str) -> Self;
+    fn generate_moves(&mut self) -> Vec<Move>;
+    fn make_move(&mut self, cmove: Move) -> MoveData;
+    fn unmake_move(&mut self, cmove: Move, move_data: MoveData);
+    fn value(&self) -> i32;
 }
 
-impl Board {
-    pub fn from_fen_unchecked(fen: &str) -> Self {
-        let parts: Vec<_> = fen.split_whitespace().collect();
+/// A mailbox implementation of a chess board, with associated information such as move clocks
+pub struct MailboxBoard {
+    /// Index starts at square a1, with the rest of the rank following, then the rank above and so on
+    squares: [Option<Piece>; 64],
+    turn: Colour,
+    /// Castling rights are white kingside, white queenside, black kingside and black queenside
+    castling: [bool; 4],
+    /// If a pawn moves two squares, this is the square now inhabited by it
+    en_passant: Option<usize>,
+    halfmoves: u32,
+    fullmoves: u32,
+    precomputed_moves: PrecomputedMoves,
+}
 
-        let mut squares = [None; 64];
-        let mut i = 56;
-        for c in parts[0].chars() {
-            if c == '/' {
-                i -= 16;
-            } else if c.is_ascii_digit() {
-                // This is safe as we know it is a digit
-                i += c.to_digit(10).unwrap() as usize;
-            } else {
-                squares[i] = Some(Piece::from_algebraic(c));
-                i += 1;
-            }
-        }
-
-        let castling = [
-            parts[2].contains('K'),
-            parts[2].contains('Q'),
-            parts[2].contains('k'),
-            parts[2].contains('q'),
-        ];
-
-        Board {
-            squares,
-            turn: Colour::from(parts[1] == "w"),
-            castling,
-            en_passant: if parts[3] == "-" {
-                None
-            } else {
-                Some(parts[3].parse().unwrap())
-            },
-            halfmoves: parts[4].parse().unwrap(),
-            fullmoves: parts[5].parse().unwrap(),
-            precomputed_moves: PrecomputedMoves::new(),
-        }
-    }
-
-    pub fn new() -> Self {
-        Self::from_fen_unchecked("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-    }
-
+impl MailboxBoard {
     fn add_pseudomoves(&self, moves: &mut Vec<Move>, piece: Piece, possible_moves: &Vec<RawMove>) {
         for rmove @ &RawMove(_, to) in possible_moves {
             if let Some(target_piece) = self.squares[to] {
@@ -260,9 +204,9 @@ impl Board {
         }
     }
 
-    // TODO: Filter for legal moves
-    // TODO: Unsafe to not require &mut self?
-    pub fn generate_pseudomoves(&mut self) -> Vec<Move> {
+    /// Generates a list of possible pseudomoves for the side to play.
+    /// Many of these moves may be illegal due to check.
+    fn generate_pseudomoves(&mut self) -> Vec<Move> {
         let mut moves = Vec::new();
 
         if self.turn == Colour::Black {
@@ -322,15 +266,132 @@ impl Board {
         moves
     }
 
+    /// Rotates the MailboxBoard from white's perspective to black's perspective, and vice versa.
     fn rotate(&mut self) {
         for i in 0..32 {
             let temp = self.squares[i];
             self.squares[i] = self.squares[63 - i];
             self.squares[63 - i] = temp;
         }
+
+        self.en_passant.as_mut().map(|s| *s = 63 - *s);
     }
 
-    pub fn make_move(&mut self, cmove: Move) -> MoveData {
+    /// Updates the squares of the MailboxBoard such that the side to play has castled.
+    /// true is kingside, and false is queenside.
+    fn castle(&mut self, side: bool) {
+        if self.turn == Colour::Black {
+            self.rotate();
+        }
+
+        let king_square = if self.turn.into() { 4 } else { 3 };
+        // This becomes 0 for black and 7 for white, which is the kingside rook square
+        let mut rook_square = king_square % 3 * 7;
+
+        if !side {
+            // If queenside, we swap the rook square from 0 to 7 and vice versa
+            rook_square = (rook_square + 7) % 14;
+        }
+
+        // Swap the king and the rook
+        let king = self.squares[king_square];
+        self.squares[king_square] = self.squares[rook_square];
+        self.squares[rook_square] = king;
+
+        if self.turn == Colour::Black {
+            self.rotate();
+        }
+    }
+
+    /// Gives the standard piece values in centipawns
+    fn piece_value(piece: Piece) -> i32 {
+        match piece.kind {
+            PieceKind::King => 100_000,
+            PieceKind::Queen => 900,
+            PieceKind::Rook => 500,
+            PieceKind::Bishop => 300,
+            PieceKind::Knight => 300,
+            PieceKind::Pawn => 100,
+        }
+    }
+}
+
+impl Board for MailboxBoard {
+    /// Creates a new MailboxBoard using the given FEN string, assuming it is valid
+    fn from_fen(fen: &str) -> Self {
+        let parts: Vec<_> = fen.split_whitespace().collect();
+
+        let mut squares = [None; 64];
+        let mut i = 56;
+        for c in parts[0].chars() {
+            if c == '/' {
+                i -= 16;
+            } else if c.is_ascii_digit() {
+                // This is safe as we know it is a digit
+                i += c.to_digit(10).unwrap() as usize;
+            } else {
+                squares[i] = Some(Piece::from_algebraic(c));
+                i += 1;
+            }
+        }
+
+        let castling = [
+            parts[2].contains('K'),
+            parts[2].contains('Q'),
+            parts[2].contains('k'),
+            parts[2].contains('q'),
+        ];
+
+        MailboxBoard {
+            squares,
+            turn: Colour::from(parts[1] == "w"),
+            castling,
+            en_passant: if parts[3] == "-" {
+                None
+            } else {
+                Some(parts[3].parse().unwrap())
+            },
+            halfmoves: parts[4].parse().unwrap(),
+            fullmoves: parts[5].parse().unwrap(),
+            precomputed_moves: PrecomputedMoves::new(),
+        }
+    }
+
+    /// Filters the illegal pseudomoves by making them and checking for king captures
+    fn generate_moves(&mut self) -> Vec<Move> {
+        let mut pseudomoves = self.generate_pseudomoves();
+        let mut legal_moves = Vec::new();
+
+        'outer: for _ in 0..pseudomoves.len() {
+            let cmove = pseudomoves.pop().unwrap();
+            let move_data = self.make_move(cmove);
+
+            let replies = self.generate_pseudomoves();
+            for reply in replies {
+                if let Move::Standard(_, _, Some(piece)) = reply {
+                    if piece.kind == PieceKind::King {
+                        self.unmake_move(cmove, move_data);
+                        continue 'outer;
+                    }
+                }
+            }
+
+            self.unmake_move(cmove, move_data);
+            legal_moves.push(cmove);
+        }
+
+        legal_moves
+    }
+
+    /// Updates the MailboxBoard to the state following the move, assuming it is legal.
+    ///
+    /// Certain information is not recoverable from the move alone:
+    /// - Castling rights
+    /// - A pawn vulnerable to en passant
+    ///
+    /// This information is returned in a MoveData struct,
+    /// in order for the move to be unmade if necessary.
+    fn make_move(&mut self, cmove: Move) -> MoveData {
         let move_data = MoveData {
             en_passant: self.en_passant,
             castling: self.castling,
@@ -341,26 +402,14 @@ impl Board {
                 self.squares[to] = self.squares[from];
                 self.squares[from] = None;
 
-                // En passant
-                if piece.kind == PieceKind::Pawn && to == from + 8 {
+                // Save en passant square
+                if piece.kind == PieceKind::Pawn && from.abs_diff(to) == 8 {
                     self.en_passant = Some(to);
                 }
             }
 
             Move::Castling(side) => {
-                let king_square = if self.turn.into() { 4 } else { 3 };
-                // This becomes 0 for black and 7 for white, which is the kingside rook square
-                let mut rook_square = king_square % 3 * 7;
-
-                if !side {
-                    // If queenside, we swap the rook square from 0 to 7 and vice versa
-                    rook_square = (rook_square + 7) % 14;
-                }
-
-                // Swap the king and the rook
-                let king = self.squares[king_square];
-                self.squares[king_square] = self.squares[rook_square];
-                self.squares[rook_square] = king;
+                self.castle(side);
 
                 if self.turn.into() {
                     self.castling = [false, false, self.castling[2], self.castling[3]];
@@ -390,7 +439,17 @@ impl Board {
         move_data
     }
 
-    pub fn unmake_move(&mut self, cmove: Move, move_data: MoveData) {
+    /// Returns the MailboxBoard to the state preceding the move, assuming it is legal.
+    ///
+    /// The additional information that cannot be known, given only the move, is:
+    /// - Castling rights
+    /// - A pawn vulnerable to en passant
+    ///
+    /// This is provided by the MoveData struct.
+    fn unmake_move(&mut self, cmove: Move, move_data: MoveData) {
+        // Invert the turn so the castling method castles the correct side
+        self.turn = self.turn.invert();
+
         match cmove {
             Move::Standard(piece, RawMove(from, to), capture) => {
                 self.squares[from] = Some(piece);
@@ -398,37 +457,61 @@ impl Board {
             }
 
             Move::Castling(side) => {
-                // TODO: Create a castling function, because it's exactly the same going back
+                self.castle(side);
             }
 
             Move::Promotion(RawMove(from, to), _) => {
-                // TODO: self.turn correct here?
                 self.squares[from] = Some(Piece::new(PieceKind::Pawn, self.turn));
+                self.squares[to] = None;
             }
 
-            Move::EnPassant(RawMove(from, to)) => {}
+            Move::EnPassant(RawMove(from, to)) => {
+                self.squares[from] = self.squares[to];
+                self.squares[to] = None;
+                self.squares[move_data.en_passant.unwrap()] =
+                    Some(Piece::new(PieceKind::Pawn, self.turn.invert()));
+            }
         }
 
         self.en_passant = move_data.en_passant;
         self.castling = move_data.castling;
 
-        self.turn = self.turn.invert();
         self.halfmoves -= 1;
         if self.turn == Colour::Black {
             self.fullmoves -= 1;
         }
     }
+
+    /// Calculates an evaluation for the current board relative to the side to play
+    // TODO: Add value maps for piece positions
+    fn value(&self) -> i32 {
+        let mut value = 0;
+
+        for i in 0..64 {
+            if let Some(piece) = self.squares[i] {
+                value += Self::piece_value(piece)
+                    * if let Colour::White = piece.colour {
+                        1
+                    } else {
+                        -1
+                    };
+            }
+        }
+
+        if self.turn == Colour::Black {
+            value *= -1;
+        }
+
+        value
+    }
 }
 
-impl Display for Board {
-    // TODO: Have settings on the board for type of printing - algebraic or visual? Better way to
-    // pass this information?
+impl Display for MailboxBoard {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         writeln!(f, "┌───┬───┬───┬───┬───┬───┬───┬───┐")?;
 
         for r in 0..8 {
             for c in 0..8 {
-                // TODO: Explain indexing?
                 let square = if let Some(piece) = self.squares[(56 - 8 * r) + c] {
                     piece.to_algebraic()
                 } else {
@@ -451,6 +534,7 @@ impl Display for Board {
     }
 }
 
+/// A raw move from one square on the board to another
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RawMove(pub usize, pub usize);
 
@@ -461,23 +545,29 @@ impl RawMove {
     }
 }
 
+/// One of four possible chess moves:
+/// - A standard move from one square to another, with a possible capture
+/// - Castling, either kingside or queenside
+/// - Promotion to a specific piece
+/// - En passant
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Move {
-    // Option is a possible capture
+    /// Option is a possible capture
     Standard(Piece, RawMove, Option<Piece>),
-    // true is kingside, false is queenside
+    /// true is kingside, false is queenside
     Castling(bool),
     Promotion(RawMove, PieceKind),
+    /// The RawMove is the move of the capturing pawn
     EnPassant(RawMove),
 }
 
 impl Move {
+    /// Takes a standard move and returns it with the given piece in the capture Option
     pub fn insert_capture(self, captured_piece: Piece) -> Self {
         if let Self::Standard(p, r, None) = self {
-            return Move::Standard(p, r, Some(captured_piece));
+            return Self::Standard(p, r, Some(captured_piece));
         }
 
-        // TODO: Return an error, assert or panic?
         panic!("Cannot insert capture into non-standard move");
     }
 
@@ -491,8 +581,12 @@ impl Move {
     }
 }
 
-struct MoveData {
+/// The information that is otherwise unrecoverable when a move is made, specifically:
+/// - A square that a pawn passed over, allowing for en passant
+/// - The castling rights
+pub struct MoveData {
     en_passant: Option<usize>,
+    castling: [bool; 4],
 }
 
 struct PrecomputedMoves {
@@ -550,10 +644,10 @@ impl PrecomputedMoves {
     }
 
     fn new() -> Self {
-        // 12x12 index offsets, NESW first and then NESESWNW
-        let mut directions = [12, 1, -12, -1, 13, -11, -13, 11];
+        // 12x12 index offsets, N,E,S,W first and then NE,SE,SW,NW
+        let directions = [12, 1, -12, -1, 13, -11, -13, 11];
         // Starting NNE, rotating clockwise
-        let mut knight_directions = [25, 14, -10, -23, -25, -14, 10, 23];
+        let knight_directions = [25, 14, -10, -23, -25, -14, 10, 23];
 
         let mut king_moves = arr![Vec::new(); 64];
         let mut rook_moves = arr![Vec::new(); 64];
