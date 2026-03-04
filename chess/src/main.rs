@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use clap::Parser;
 use crake::{
-    board::{Colour, Move, Piece, PieceKind},
+    board::{Board, Colour, MailboxBoard, Move, Piece, PieceKind, RawMove},
     engine::Engine,
 };
 
@@ -11,19 +11,41 @@ struct Args {
     #[arg(short, long)]
     fen: Option<String>,
 
+    #[arg(short, long, default_value_t = false)]
+    engine_colour: bool,
+
     // TODO: Change search depth default
     #[arg(short, long, default_value_t = 3)]
     search_depth: u8,
-
-    #[arg(short, long, default_value_t = false)]
-    engine_colour: bool,
 }
 
 #[derive(Resource)]
 struct GameData {
-    engine: Engine,
+    board: MailboxBoard,
+    engine: Engine<MailboxBoard>,
+    engine_colour: Colour,
     selected_square: Option<usize>,
     players_move: bool,
+}
+
+impl GameData {
+    fn new(fen: Option<&str>, engine_colour: bool, search_depth: u8) -> Self {
+        let board = if let Some(fen_str) = fen {
+            MailboxBoard::from_fen(fen_str)
+        } else {
+            MailboxBoard::new()
+        };
+        let turn = board.turn;
+        let engine_colour = Colour::from(engine_colour);
+
+        GameData {
+            board,
+            engine: Engine::new(fen, search_depth),
+            engine_colour: engine_colour,
+            selected_square: None,
+            players_move: engine_colour != turn,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -45,16 +67,11 @@ fn main() {
             }),
             ..default()
         }))
-        .insert_resource(GameData {
-            // TODO: Change this to new function for GameData
-            engine: Engine::new(
-                args.fen.as_deref(),
-                Colour::from(args.engine_colour),
-                args.search_depth,
-            ),
-            selected_square: None,
-            players_move: true,
-        })
+        .insert_resource(GameData::new(
+            args.fen.as_deref(),
+            args.engine_colour,
+            args.search_depth,
+        ))
         .add_systems(Startup, setup)
         .add_systems(Update, handle_mouse)
         .run();
@@ -67,14 +84,12 @@ fn square_to_transform(square: usize) -> Transform {
     Transform::from_xyz(x, y, 0.0)
 }
 
-// TODO: Better variable names
 fn make_move(
     from: usize,
     to: usize,
     commands: &mut Commands,
     pieces: &mut Query<(Entity, &mut Sprite, &mut Transform, &mut PieceData)>,
 ) {
-    // TODO: Is the & required here? Think about it
     // Each piece sprite appears in the loop once, so the moved piece won't be deleted
     for (entity, _, mut transform, mut piece_data) in pieces {
         // Delete the captured piece, if capture
@@ -104,11 +119,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, game_data: Res<
         Transform::from_xyz(0.0, 0.0, -1.0),
     ));
 
-    let board = game_data.engine.board();
+    let board = &game_data.board.squares;
 
     for i in 0..64 {
         if let Some(piece) = board[i] {
-            let mut filename = String::from(if let Colour::White = piece.colour {
+            let mut filename = String::from(if piece.colour == Colour::White {
                 "w"
             } else {
                 "b"
@@ -125,7 +140,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, game_data: Res<
     }
 }
 
-// TODO: See what cargo fmt does with this
+// TODO: Split this into various functions
 fn handle_mouse(
     mut commands: Commands,
     mouse_input: Res<ButtonInput<MouseButton>>,
@@ -141,16 +156,25 @@ fn handle_mouse(
         let square_index = (7 - (position.y / 100.0) as usize) * 8 + (position.x / 100.0) as usize;
 
         if let Some(previous_square) = game_data.selected_square {
-            let cmove = Move::Standard(previous_square, square_index, None);
+            let mut rmove = RawMove(previous_square, square_index);
+            if game_data.engine_colour == Colour::White {
+                rmove = rmove.rotate();
+            }
 
-            if game_data.engine.valid_move(cmove) {
+            if let Some(cmove) = game_data
+                .board
+                .valid_move(RawMove(previous_square, square_index))
+            {
                 game_data.engine.player_move(cmove);
                 make_move(previous_square, square_index, &mut commands, &mut pieces);
+                game_data.board.make_move(cmove);
                 game_data.players_move = false;
 
                 // TODO: Fine to block here?
                 match game_data.engine.engine_move() {
-                    Move::Standard(from, to, _) => make_move(from, to, &mut commands, &mut pieces),
+                    Move::Standard(_, RawMove(from, to), _) => {
+                        make_move(from, to, &mut commands, &mut pieces)
+                    }
                     _ => unimplemented!(),
                 }
 
@@ -161,8 +185,8 @@ fn handle_mouse(
             reset_colouring(lens.query());
             game_data.selected_square = None;
         } else {
-            if let Some(piece) = game_data.engine.get_square(square_index) {
-                if piece.colour != game_data.engine.engine_colour {
+            if let Some(piece) = game_data.board.squares[square_index] {
+                if piece.colour != game_data.engine_colour {
                     game_data.selected_square = Some(square_index);
 
                     for (_, mut sprite, _, piece_data) in &mut pieces {
