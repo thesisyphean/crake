@@ -104,8 +104,8 @@ pub trait Board {
 /// A mailbox implementation of a chess board, with associated information such as move clocks
 pub struct MailboxBoard {
     /// Index starts at square a1, with the rest of the rank following, then the rank above and so on
-    squares: [Option<Piece>; 64],
-    turn: Colour,
+    pub squares: [Option<Piece>; 64],
+    pub turn: Colour,
     /// Castling rights are white kingside, white queenside, black kingside and black queenside
     castling: [bool; 4],
     /// If a pawn moves two squares, this is the square now inhabited by it
@@ -116,6 +116,10 @@ pub struct MailboxBoard {
 }
 
 impl MailboxBoard {
+    pub fn new() -> Self {
+        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+    }
+
     fn add_pseudomoves(&self, moves: &mut Vec<Move>, piece: Piece, possible_moves: &Vec<RawMove>) {
         for rmove @ &RawMove(_, to) in possible_moves {
             if let Some(target_piece) = self.squares[to] {
@@ -313,6 +317,51 @@ impl MailboxBoard {
             PieceKind::Knight => 300,
             PieceKind::Pawn => 100,
         }
+    }
+
+    /// If the RawMove corresponds to a legal move, this returns it
+    pub fn valid_move(&mut self, rmove @ RawMove(from, to): RawMove) -> Option<Move> {
+        let moves = self.generate_moves();
+        let square = self.squares[from];
+
+        // Castling
+        if let Some(Piece {
+            kind: PieceKind::King,
+            colour,
+        }) = square
+        {
+            let diff = from.abs_diff(to);
+            if diff == 2 || diff == 3 {
+                return Some(Move::Castling(diff == 2)).filter(|c| !moves.contains(c));
+            }
+        }
+
+        if let Some(Piece {
+            kind: PieceKind::Pawn,
+            colour,
+        }) = square
+        {
+            // Promotion
+            if to / 8 == 7 || to / 8 == 0 {
+                // If you can promote to the queen, you can promote to any other piece,
+                // so the queen is simply used as a dummy option
+                return Some(Move::Promotion(rmove, PieceKind::Queen))
+                    .filter(|c| !moves.contains(c));
+            }
+
+            // En passant
+            if let None = self.squares[to] {
+                return Some(Move::EnPassant(rmove)).filter(|c| !moves.contains(c));
+            }
+        }
+
+        // Standard move
+        if let Some(piece) = self.squares[from] {
+            return Some(Move::Standard(piece, rmove, self.squares[to]))
+                .filter(|c| !moves.contains(c));
+        }
+
+        None
     }
 }
 
@@ -539,7 +588,7 @@ impl Display for MailboxBoard {
 pub struct RawMove(pub usize, pub usize);
 
 impl RawMove {
-    fn rotate(self) -> Self {
+    pub fn rotate(self) -> Self {
         // NOTE TO SELF, IT'S 63
         RawMove(63 - self.0, 63 - self.1)
     }
@@ -571,7 +620,7 @@ impl Move {
         panic!("Cannot insert capture into non-standard move");
     }
 
-    fn rotate(self) -> Self {
+    pub fn rotate(self) -> Self {
         match self {
             Self::Standard(p, raw, c) => Self::Standard(p, raw.rotate(), c),
             Self::Castling(side) => Self::Castling(side),
