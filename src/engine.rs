@@ -3,18 +3,16 @@ use std::cmp;
 
 pub struct Engine<B: Board> {
     board: B,
-    engine_colour: Colour,
     search_depth: u8,
 }
 
 impl<B: Board> Engine<B> {
-    pub fn new(board_fen: Option<&str>, engine_colour: Colour, search_depth: u8) -> Self {
+    pub fn new(board_fen: Option<&str>, search_depth: u8) -> Self {
         Engine {
             // TODO: Check fen
             board: B::from_fen(
                 board_fen.unwrap_or("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"),
             ),
-            engine_colour,
             search_depth,
         }
     }
@@ -23,7 +21,7 @@ impl<B: Board> Engine<B> {
         self.board.make_move(cmove);
     }
 
-    pub fn engine_move(&mut self) {
+    pub fn engine_move(&mut self) -> Move {
         let moves = self.board.generate_moves();
 
         let mut best_move = moves[0];
@@ -40,6 +38,7 @@ impl<B: Board> Engine<B> {
         }
 
         self.board.make_move(best_move);
+        best_move
     }
 
     // TODO: Alpha-beta pruning
