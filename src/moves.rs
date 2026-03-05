@@ -1,5 +1,13 @@
 use crate::piece::{Piece, PieceKind};
 use arr_macro::arr;
+use std::fmt::{self, Display};
+
+/// Gives the file and rank corresponding to the given index in 0..64
+fn index_to_algebraic(i: usize) -> (char, char) {
+    let (f, r) = ((i % 8) as u8, (i / 8) as u8);
+
+    (('a' as u8 + f) as char, ('1' as u8 + r) as char)
+}
 
 /// A raw move from one square on the board to another
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -45,6 +53,59 @@ impl Move {
             Self::Promotion(raw, k) => Self::Promotion(raw.rotate(), k),
             Self::EnPassant(raw) => Self::EnPassant(raw.rotate()),
         }
+    }
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut move_string = String::new();
+
+        match self {
+            &Move::Standard(Piece { kind, colour }, RawMove(from, to), capture) => {
+                if kind != PieceKind::Pawn {
+                    move_string.push(kind.to_algebraic());
+                } else {
+                    if let Some(_) = capture {
+                        let (from_file, _) = index_to_algebraic(from);
+                        move_string.push(from_file);
+                    }
+                }
+
+                if let Some(_) = capture {
+                    move_string.push('x');
+                }
+
+                let (file, rank) = index_to_algebraic(to);
+                move_string.push(file);
+                move_string.push(rank);
+            }
+
+            &Move::Castling(side) => {
+                move_string.push_str("0-0");
+                if !side {
+                    move_string.push_str("-0");
+                }
+            }
+
+            &Move::Promotion(RawMove(_, to), kind) => {
+                let (file, rank) = index_to_algebraic(to);
+                move_string.push(file);
+                move_string.push(rank);
+                move_string.push(kind.to_algebraic());
+            }
+
+            &Move::EnPassant(RawMove(from, to)) => {
+                let (from_file, _) = index_to_algebraic(from);
+                move_string.push(from_file);
+                move_string.push('x');
+                let (file, rank) = index_to_algebraic(to);
+                move_string.push(file);
+                move_string.push(rank);
+                move_string.push_str(" e.p.");
+            }
+        }
+
+        write!(f, "{}", move_string)
     }
 }
 
