@@ -329,7 +329,7 @@ impl MailboxBoard {
         // Castling
         if let Some(Piece {
             kind: PieceKind::King,
-            colour,
+            colour: _,
         }) = square
         {
             let diff = from.abs_diff(to);
@@ -340,7 +340,7 @@ impl MailboxBoard {
 
         if let Some(Piece {
             kind: PieceKind::Pawn,
-            colour,
+            colour: _,
         }) = square
         {
             // Promotion
@@ -647,11 +647,6 @@ struct PrecomputedMoves {
 }
 
 impl PrecomputedMoves {
-    fn i8x8_to_12x12(i: usize) -> usize {
-        let (y, x) = (i / 8, i % 8);
-        (2 + y) * 12 + (2 + x)
-    }
-
     fn i12x12_to_8x8(i: usize) -> usize {
         let (y, x) = (i / 12, i % 12);
         (y - 2) * 8 + (x - 2)
