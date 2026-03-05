@@ -1,4 +1,4 @@
-use crate::board::{Board, Move};
+use crate::{Board, moves::Move};
 use std::cmp;
 
 pub struct Engine<B: Board> {
