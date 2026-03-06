@@ -1,0 +1,35 @@
+[gd_scene format=3 uid="uid://bqx8pbvrfoous"]
+
+[ext_resource type="Script" uid="uid://cctrlucn1vnpf" path="res://main.gd" id="1_0xm2m"]
+[ext_resource type="Texture2D" uid="uid://c74js68v5b4qi" path="res://assets/board.png" id="1_ig7tw"]
+
+[node name="Main" type="Node2D" unique_id=935354375]
+script = ExtResource("1_0xm2m")
+
+[node name="Board" type="Sprite2D" parent="." unique_id=1617264218]
+position = Vector2(400, 400)
+texture = ExtResource("1_ig7tw")
+
+[node name="GameUI" type="Control" parent="." unique_id=971600456]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 800.0
+offset_right = 840.0
+offset_bottom = 40.0
+
+[node name="Title" type="Label" parent="GameUI" unique_id=840040066]
+layout_mode = 0
+offset_left = 146.0
+offset_top = 43.0
+offset_right = 263.0
+offset_bottom = 101.0
+theme_override_font_sizes/font_size = 42
+text = "Crake"
+
+[node name="Thinking" type="Label" parent="GameUI" unique_id=882043407]
+layout_mode = 0
+offset_left = 120.0
+offset_top = 124.0
+offset_right = 303.0
+offset_bottom = 147.0
+text = "The engine is thinking..."
