@@ -6,6 +6,7 @@ use crate::{
 use std::fmt::{self, Display, Formatter};
 
 /// A mailbox implementation of a chess board, with associated information such as move clocks
+#[derive(Clone)]
 pub struct MailboxBoard {
     /// Index starts at square a1, with the rest of the rank following, then the rank above and so on
     pub squares: [Option<Piece>; 64],
@@ -80,11 +81,11 @@ impl MailboxBoard {
                     }
                 }
 
-                if let Some(target_square) = self.en_passant {
-                    if target_square == i + 7 {
-                        moves.push(Move::EnPassant(RawMove(i, i + 7)));
-                    }
-                }
+                // if let Some(target_square) = self.en_passant {
+                //     if target_square == i + 7 {
+                //         moves.push(Move::EnPassant(RawMove(i, i + 7)));
+                //     }
+                // }
             }
 
             // Attack to the right
@@ -95,11 +96,11 @@ impl MailboxBoard {
                     }
                 }
 
-                if let Some(target_square) = self.en_passant {
-                    if target_square == i + 9 {
-                        moves.push(Move::EnPassant(RawMove(i, i + 9)));
-                    }
-                }
+                // if let Some(target_square) = self.en_passant {
+                //     if target_square == i + 9 {
+                //         moves.push(Move::EnPassant(RawMove(i, i + 9)));
+                //     }
+                // }
             }
         }
 
@@ -351,6 +352,8 @@ impl Board for MailboxBoard {
             castling: self.castling,
         };
 
+        self.en_passant = None;
+
         match cmove {
             Move::Standard(piece, RawMove(from, to), _) => {
                 self.squares[to] = self.squares[from];
@@ -423,7 +426,8 @@ impl Board for MailboxBoard {
                 self.squares[from] = self.squares[to];
                 self.squares[to] = None;
                 self.squares[move_data.en_passant.unwrap()] =
-                    Some(Piece::new(PieceKind::Pawn, self.turn.invert()));
+                    // TODO: This should be self.turn.invert(), no??
+                    Some(Piece::new(PieceKind::Pawn, self.turn));
             }
         }
 
